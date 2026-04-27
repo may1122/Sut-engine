@@ -3,6 +3,31 @@ from dataclasses import dataclass
 from typing import Dict, Any
 from pypdf import PdfReader
 import io
+import json
+import os
+
+
+RULES_FILE = "rules.json"
+
+
+# =========================
+# JSON KURAL KAYIT
+# =========================
+
+def load_custom_rules():
+    if not os.path.exists(RULES_FILE):
+        return []
+
+    try:
+        with open(RULES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def save_custom_rules(rules):
+    with open(RULES_FILE, "w", encoding="utf-8") as f:
+        json.dump(rules, f, ensure_ascii=False, indent=4)
 
 
 # =========================
@@ -23,7 +48,10 @@ class RuleResult:
 # =========================
 
 if "custom_rules" not in st.session_state:
-    st.session_state.custom_rules = []
+    st.session_state.custom_rules = load_custom_rules()
+
+if "last_suggestions" not in st.session_state:
+    st.session_state.last_suggestions = []
 
 
 # =========================
@@ -122,6 +150,7 @@ class SUTRuleEngine:
 
         results.extend([r for r in builtin_results if r])
 
+        # JSON'dan gelen özel kurallar
         for i, rule in enumerate(st.session_state.custom_rules, start=1):
             keyword = rule["keyword"].lower()
 
@@ -226,7 +255,7 @@ tab1, tab2, tab3 = st.tabs([
 
 
 # =========================
-# TAB 1
+# TAB 1 - REÇETE ANALİZİ
 # =========================
 
 with tab1:
@@ -302,7 +331,7 @@ with tab1:
 
 
 # =========================
-# TAB 2
+# TAB 2 - MAKALE / PDF TARAMA
 # =========================
 
 with tab2:
@@ -341,7 +370,7 @@ with tab2:
         else:
             st.session_state.last_suggestions = extract_rule_suggestions(article_text)
 
-    suggestions = st.session_state.get("last_suggestions", [])
+    suggestions = st.session_state.last_suggestions
 
     if suggestions:
         st.success(f"{len(suggestions)} adet kural adayı bulundu.")
@@ -351,6 +380,7 @@ with tab2:
                 st.markdown(f"### {item['title']}")
                 st.write(f"**Yakalanan ifade:** `{item['keyword']}`")
                 st.write(f"**Risk:** {item['risk']}")
+                st.write(f"**Skor:** {item['score']}")
                 st.write(item["message"])
 
                 if st.button(f"➕ Bu Kuralı Sisteme Ekle", key=f"add_rule_{idx}"):
@@ -363,14 +393,15 @@ with tab2:
                         st.warning("Bu kural zaten eklenmiş.")
                     else:
                         st.session_state.custom_rules.append(item)
-                        st.success("Kural sisteme eklendi.")
+                        save_custom_rules(st.session_state.custom_rules)
+                        st.success("Kural sisteme eklendi ve rules.json dosyasına kaydedildi.")
 
     else:
         st.info("Henüz kural önerisi oluşturulmadı.")
 
 
 # =========================
-# TAB 3
+# TAB 3 - EKLENEN KURALLAR
 # =========================
 
 with tab3:
@@ -389,4 +420,5 @@ with tab3:
 
                 if st.button(f"🗑️ Kuralı Sil", key=f"delete_{i}"):
                     st.session_state.custom_rules.pop(i - 1)
+                    save_custom_rules(st.session_state.custom_rules)
                     st.rerun()
